@@ -1,0 +1,6 @@
+{
+  "name": "YouTube to ADHD Visual Textbook & A4 PDF Generator",
+  "description": "Editorial-grade, high-contrast, Warm-Paper Study Textbook and A4 PDF Generator for ADHD learners with single-column visual flow, full-width Mermaid diagrams, and zero-hallucination analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
