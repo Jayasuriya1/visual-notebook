@@ -3,9 +3,9 @@ import { Category } from '../types';
 export const DEFAULT_CATEGORIES: Category[] = [
   {
     id: 'cat-mental-health-adhd',
-    name: 'Mental Health, ADHD & Mood Regulation',
+    name: 'Mental Health, Focus & Mood Regulation',
     icon: '🧠',
-    description: 'Executive focus, ADHD neurobiology, clinical psychiatry, and addiction medicine self-control.',
+    description: 'Executive focus, neural regulation, clinical psychiatry, and addiction medicine self-control.',
     color: '#8B5CF6',
     createdAt: 1700000000000
   },

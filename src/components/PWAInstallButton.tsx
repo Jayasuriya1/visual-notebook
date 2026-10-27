@@ -74,7 +74,7 @@ export const PWAInstallButton: React.FC = () => {
                   <p className="text-slate-700 mt-1">
                     1. Look at the <strong>right side of your Chrome URL address bar</strong>.<br />
                     2. Click the <strong>Install icon 📥</strong> (or computer monitor icon with a down arrow).<br />
-                    3. Click <strong>Install</strong> to add the ADHD Visual Textbook to your desktop or taskbar.
+                    3. Click <strong>Install</strong> to add Visual Notebook to your desktop or taskbar.
                   </p>
                 </div>
               </div>
@@ -95,7 +95,7 @@ export const PWAInstallButton: React.FC = () => {
               <div className="p-3 bg-slate-100 border border-slate-300 rounded-lg">
                 <p className="font-bold text-slate-800">Alternative from Chrome Menu:</p>
                 <p className="text-slate-600 mt-1">
-                  Click the <strong>three dots menu (⋮)</strong> in Chrome top-right &rarr; <strong>Cast, save and share</strong> &rarr; <strong>Install ADHD Visual Textbook...</strong>
+                  Click the <strong>three dots menu (⋮)</strong> in Chrome top-right &rarr; <strong>Cast, save and share</strong> &rarr; <strong>Install Visual Notebook...</strong>
                 </p>
               </div>
             </div>

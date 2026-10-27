@@ -115,28 +115,30 @@ export function formatChapterForTTS(chapter: TextbookChapter): SpeechUnit[] {
       id: `chapter-${chNum}-model-header`,
       chapterNumber: chNum,
       sectionType: 'model',
-      spokenText: `Mental model and story analogy: ${cleanForSpokenAudio(chapter.mentalModelTitle)}.`,
-      displayText: `Mental Model: ${chapter.mentalModelTitle}`,
+      spokenText: `Mental model and story analogy: ${cleanForSpokenAudio(chapter.mentalModelTitle || 'Core Concept')}.`,
+      displayText: `Mental Model: ${chapter.mentalModelTitle || 'Core Concept'}`,
       pauseAfterMs: 550,
       label: `Mental Model Header`
     });
 
-    const modelSentences = splitIntoSentences(chapter.mentalModelExplanation);
-    modelSentences.forEach((sentence, sIdx) => {
-      units.push({
-        id: `chapter-${chNum}-model-desc-s${sIdx}`,
-        chapterNumber: chNum,
-        sectionType: 'model',
-        spokenText: cleanForSpokenAudio(sentence),
-        displayText: sentence,
-        pauseAfterMs: sIdx === modelSentences.length - 1 ? 600 : 300,
-        label: `Mental Model Explanation`
+    if (chapter.mentalModelExplanation) {
+      const modelSentences = splitIntoSentences(chapter.mentalModelExplanation);
+      modelSentences.forEach((sentence, sIdx) => {
+        units.push({
+          id: `chapter-${chNum}-model-desc-s${sIdx}`,
+          chapterNumber: chNum,
+          sectionType: 'model',
+          spokenText: cleanForSpokenAudio(sentence),
+          displayText: sentence,
+          pauseAfterMs: sIdx === modelSentences.length - 1 ? 600 : 300,
+          label: `Mental Model Explanation`
+        });
       });
-    });
+    }
   }
 
   // 4. Action Steps Protocol
-  if (chapter.actionSteps.length > 0) {
+  if (chapter.actionSteps && chapter.actionSteps.length > 0) {
     units.push({
       id: `chapter-${chNum}-action-intro`,
       chapterNumber: chNum,

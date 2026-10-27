@@ -18,7 +18,7 @@ export function exportEntireLibrary(textbooks: StudyTextbook[], categories: Cate
 
   const today = new Date().toISOString().slice(0, 10);
   link.href = url;
-  link.download = `ADHD_Visual_Textbook_Library_${today}.json`;
+  link.download = `Visual_Notebook_Library_${today}.json`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

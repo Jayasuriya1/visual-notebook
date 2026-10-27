@@ -63,7 +63,7 @@ export default function App() {
       timestamp: new Date().toLocaleTimeString(),
       level: 'info',
       step: 'System Startup',
-      message: 'ADHD Visual Textbook & IndexedDB Learning Hub initialized.',
+      message: 'Visual Notebook & IndexedDB Learning Hub initialized.',
       details: 'Loaded protected master reference presets across 5 curriculum categories. IndexedDB active.'
     }
   ]);
@@ -168,7 +168,7 @@ export default function App() {
 
   const handleDownloadHtml = () => {
     const cleanTitle = textbook.videoTitle.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40);
-    const filename = `${cleanTitle}_ADHD_Textbook.html`;
+    const filename = `${cleanTitle}_Visual_Notebook.html`;
     downloadVectorHtml('textbook-document', filename);
     addLog({
       level: 'success',
@@ -416,9 +416,10 @@ export default function App() {
       details: `Speaker: ${params.speaker}\nMode: ${params.engineConfig.provider.toUpperCase()}`
     });
 
-    try {
-      let finalTranscript = params.transcript.trim();
+    let finalTranscript = params.transcript.trim();
+    let transcriptMethod = params.transcript ? 'User-supplied transcript' : undefined;
 
+    try {
       // Stage 1: Verified Transcript Retrieval Waterfall if not already provided
       if (!finalTranscript && params.videoId) {
         setStepMessage('Querying transcript waterfall (innertube & cache)...');
@@ -434,32 +435,33 @@ export default function App() {
             const trData = await trRes.json();
             if (trData.success && trData.transcript) {
               finalTranscript = trData.transcript;
+              transcriptMethod = trData.method || 'caption engine';
               addLog({
                 level: 'success',
                 step: 'Transcript Engine',
-                message: `Loaded ${trData.wordCount?.toLocaleString() || 'verified'} words of spoken captions via ${trData.method || 'caption engine'}.`
+                message: `Loaded ${trData.wordCount?.toLocaleString() || 'verified'} words (${trData.status || 'retrieved'}) via ${transcriptMethod}.`
               });
             } else {
               addLog({
                 level: 'info',
                 step: 'Transcript Notice',
-                message: 'YouTube automated caption scraper restricted by cloud IP; using verified keynote metadata and algorithmic structuring.'
+                message: 'Automated captions restricted for this video. Use the Analyze tab to paste captions or upload a transcript file.'
               });
             }
           }
         } catch (fetchErr) {
-          console.warn('Transcript waterfall skipped:', fetchErr);
+          console.warn('Transcript waterfall notice:', fetchErr);
         }
       }
 
       // Stage 2: Synthesis Engine
       // Case A: User explicitly chose Instant Algorithmic Mode (No AI / Offline)
       if (params.engineConfig.provider === 'algorithmic') {
-        setStepMessage('Synthesizing ADHD Visual Textbook (Instant Algorithmic Mode - No AI)...');
+        setStepMessage('Synthesizing study textbook (Deterministic Mode)...');
         addLog({
           level: 'info',
-          step: 'Algorithmic Synthesizer',
-          message: 'Executing deterministic ADHD textbook synthesis (No AI required)...'
+          step: 'Deterministic Synthesizer',
+          message: 'Executing evidence-grounded deterministic textbook synthesis...'
         });
 
         const generatedGuide = synthesizeTextbookWithoutAI({
@@ -467,7 +469,9 @@ export default function App() {
           videoId: params.videoId,
           videoTitle: params.videoTitle,
           speaker: params.speaker,
-          transcript: finalTranscript
+          transcript: finalTranscript,
+          sourceStatus: finalTranscript ? (finalTranscript.length > 3000 ? 'verified_full' : 'verified_partial') : 'unavailable',
+          retrievalMethod: transcriptMethod
         });
 
         // Save to IndexedDB automatically
@@ -482,19 +486,19 @@ export default function App() {
 
         addLog({
           level: 'success',
-          step: 'Work Done Without AI',
-          message: `Generated "${generatedGuide.videoTitle}" instantly with Algorithmic Engine!`,
-          details: `ID: ${generatedGuide.id}\nDuration: ${generatedGuide.duration}\nChapters: ${generatedGuide.chapters.length}`
+          step: 'Deterministic Generation Complete',
+          message: `Generated "${generatedGuide.videoTitle}" grounded in available source material.`,
+          details: `ID: ${generatedGuide.id}\nDuration: ${generatedGuide.duration}\nSections: ${generatedGuide.chapters.length}`
         });
         return;
       }
 
-      // Case B: AI Engine (Gemini 3.8 Flash / Ollama) with seamless Algorithmic Fallback
+      // Case B: AI Engine (Gemini 3.8 Flash / Ollama) with seamless Deterministic Fallback
       setStepMessage(`Synthesizing textbook with ${params.engineConfig.provider === 'gemini' ? 'Gemini 3.8 Flash' : 'Ollama'}...`);
       addLog({
         level: 'info',
         step: 'AI Synthesis',
-        message: `Calling ${params.engineConfig.provider} engine with strict ADHD zero-hallucination prompt...`
+        message: `Calling ${params.engineConfig.provider} engine with strict evidence-grounded prompt...`
       });
 
       const response = await fetch('/api/generate-guide', {
@@ -540,21 +544,26 @@ export default function App() {
         details: `ID: ${generatedGuide.id}\nDuration: ${generatedGuide.duration}`
       });
     } catch (err: any) {
-      console.warn('AI pipeline error, activating Instant Algorithmic Fallback:', err);
+      console.warn('AI pipeline error, activating Deterministic Fallback with resolved transcript:', err);
       addLog({
         level: 'warn',
-        step: 'Non-AI Fallback',
-        message: `${err.message || 'AI request failed'}. Activating Instant Algorithmic Synthesizer to complete work without AI...`
+        step: 'Deterministic Fallback',
+        message: `${err.message || 'AI request failed'}. Activating Deterministic Synthesizer with resolved transcript...`
       });
 
-      // Complete work without AI so user is NEVER blocked
+      // Complete work with the ACTUAL resolved transcript so data is never discarded
       const fallbackGuide = synthesizeTextbookWithoutAI({
         videoUrl: params.videoUrl,
         videoId: params.videoId,
         videoTitle: params.videoTitle,
         speaker: params.speaker,
-        transcript: params.transcript
+        transcript: finalTranscript, // Preserved resolved transcript
+        sourceStatus: finalTranscript ? 'verified_partial' : 'unavailable',
+        retrievalMethod: transcriptMethod || 'Fallback recovery'
       });
+
+      fallbackGuide.isFallback = true;
+      fallbackGuide.fallbackNotice = `Generated using deterministic fallback (${err?.message || 'AI service unavailable'}). Source material preserved.`;
 
       await saveTextbook(fallbackGuide);
       const updatedList = await getAllTextbooks();
@@ -567,9 +576,9 @@ export default function App() {
 
       addLog({
         level: 'success',
-        step: 'Work Done Without AI',
-        message: `Successfully completed "${fallbackGuide.videoTitle}" without AI!`,
-        details: `ID: ${fallbackGuide.id}\nChapters: ${fallbackGuide.chapters.length}`
+        step: 'Fallback Complete',
+        message: `Synthesized "${fallbackGuide.videoTitle}" using deterministic fallback with resolved transcript preserved.`,
+        details: `ID: ${fallbackGuide.id}\nChapters: ${fallbackGuide.chapters.length}\nNotice: ${fallbackGuide.fallbackNotice}`
       });
     } finally {
       setIsLoading(false);

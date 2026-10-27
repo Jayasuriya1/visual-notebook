@@ -300,7 +300,7 @@ export const SLEEP_RECOVERY_GUIDES: StudyTextbook[] = [
         coreConcepts: [
           'The physiological sigh (two inhales through the nose, one long exhale through the mouth) is the fastest biological way to reduce autonomic arousal in real time.',
           'A 10-minute session completely decouples sensory inputs from the motor system, resetting prefrontal stamina.',
-          'Consistent use builds autonomic resilience, making you far less susceptible to sudden panic or ADHD task freeze.'
+          'Consistent use builds autonomic resilience, making you far less susceptible to sudden panic or stress-induced cognitive paralysis.'
         ],
         anchorKeywords: ['Physiological Sigh', 'Alveolar Re-inflation', 'Vagal Brake', 'Sensory Decoupling', 'Rapid Reset'],
         mentalModelTitle: 'The Electrical Circuit Breaker',

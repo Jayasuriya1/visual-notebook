@@ -4,7 +4,7 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
   {
     id: 'huberman-adhd-focus-protocols',
     categoryId: 'cat-mental-health-adhd',
-    videoTitle: 'Executive Focus & ADHD Protocols',
+    videoTitle: 'Executive Focus & Attentional Protocols',
     speaker: 'Dr. Andrew Huberman, Ph.D. (Stanford School of Medicine)',
     duration: '2h 18m',
     videoId: 'LAwBdRR4wQk',
@@ -13,9 +13,9 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
     generatedAt: 'Master Reference Edition',
     isPreset: true,
     createdAt: 1700000010000,
-    executiveSummary: 'ADHD is not a lack of attentional capacity; it is an executive regulatory disorder where the brain struggles to allocate focus to non-intrinsically salient stimuli. By tuning the dopamine-to-norepinephrine ratio, leveraging visual gaze anchoring, and applying structured white-noise intervals, ADHD adults can unlock exceptional hyperfocus while curbing impulsivity.',
+    executiveSummary: 'Focus is not a mysterious gift or moral virtue; it is an executive regulatory system where the brain allocates attention to high-value goals. By tuning the dopamine-to-norepinephrine ratio, leveraging visual gaze anchoring, and applying structured focus intervals, any learner can unlock sustained deep execution while eliminating task-initiation paralysis.',
     masterMindmapMermaid: `graph TD
-  A["ADHD Executive Architecture"] --> B["Prefrontal Regulation"]
+  A["Executive Focus Architecture"] --> B["Prefrontal Regulation"]
   A --> C["Dopamine Tuning"]
   A --> D["Behavioral Anchors"]
   B --> B1["Default Mode vs. Task-Positive Network"]
@@ -26,7 +26,7 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
   D --> D2["40Hz Binaural Beats & White Noise"]
   D --> D3["Timed 90-Min Ultradian Cycles"]`,
     dailyProtocol: {
-      title: 'ADHD Executive Focus & Attentional Gating Protocol',
+      title: 'Executive Focus & Attentional Gating Protocol',
       subtitle: 'Circadian neurochemical tuning designed to stabilize dopamine baselines and eliminate task-initiation paralysis.',
       dailyAnchorQuote: 'Focus follows visual gaze. Restrain your physical field of view to restrain your mental drift.',
       blocks: [
@@ -95,17 +95,17 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
     chapters: [
       {
         chapterNumber: 1,
-        title: 'Neural Circuits of ADHD: Top-Down Gating & The Attentional Spotlight',
+        title: 'Neural Circuits of Focus: Top-Down Gating & The Attentional Spotlight',
         timestampRange: '00:05:00 - 00:32:15',
         startSeconds: 300,
         coreConcepts: [
           'Attention is governed by a tripartite network: the Default Mode Network (mind-wandering), the Central Executive Network (goal-directed action), and the Salience Network (filtering relevant stimuli).',
-          'In ADHD, low baseline dopamine in the prefrontal cortex weakens the inhibitory signals required to quiet down the Default Mode Network, resulting in intrusive sensory thoughts and hyper-distractibility.',
+          'When baseline dopamine in the prefrontal cortex drops, inhibitory signals required to quiet down the Default Mode Network weaken, resulting in intrusive sensory thoughts and hyper-distractibility.',
           'Dopamine and norepinephrine act in concert: dopamine narrows the attentional spotlight, while norepinephrine increases the brightness and signal-to-noise ratio.'
         ],
         anchorKeywords: ['Default Mode Network', 'Central Executive Network', 'Top-Down Gating', 'Locus Coeruleus', 'Signal-to-Noise Ratio'],
         mentalModelTitle: 'The Spotlight and Dimmer Switch',
-        mentalModelExplanation: 'Imagine your prefrontal cortex operating a stage spotlight. In neurotypical brains, dopamine tightens the spotlight to a narrow beam on the lead actor while dimming the background stage. In ADHD, low tonic dopamine makes the spotlight wide, flickering, and illuminated everywhere at once. The goal of ADHD protocols is not to work harder, but to turn the dopamine dimmer knob to tighten the focal beam.',
+        mentalModelExplanation: 'Imagine your prefrontal cortex operating a stage spotlight. In high-focus states, dopamine tightens the spotlight to a narrow beam on the lead actor while dimming the background stage. When baseline dopamine is low or unfocused, the spotlight is wide, flickering, and illuminated everywhere at once. The goal of focus protocols is not to work harder, but to turn the neurochemical dimmer knob to tighten the focal beam.',
         mermaidDiagram: `graph TD
   A1["Low Tonic Dopamine Pool"] --> A2["Weak Prefrontal Gating"]
   A2 --> A3["Default Mode Network Stays Active"]
@@ -113,7 +113,7 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
   A4 --> A5["Acute Task Initiation Paralysis"]`,
         theTrap: {
           title: 'The Willpower Myth: "I Just Need to Try Harder"',
-          description: 'Believing that sheer moral effort can compensate for low prefrontal dopamine. This creates cognitive exhaustion, shame spirals, and chronic burnout.'
+          description: 'Believing that sheer moral willpower can compensate for neurochemical exhaustion. This creates cognitive fatigue, shame spirals, and chronic burnout.'
         },
         actionSteps: [
           'Externalize executive memory: keep instructions at eye level on physical sticky notes.',
@@ -121,12 +121,12 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
           'Use 40Hz binaural audio during cognitively demanding sprints to stimulate gamma oscillations.'
         ],
         comparisonTable: {
-          headers: ['Attentional State', 'Neurotypical Mechanism', 'ADHD Dysregulation State'],
+          headers: ['Attentional State', 'Default/Distracted State', 'Applied Focus Protocol State'],
           rows: [
-            ['Tonic Dopamine', 'Balanced circulating baseline', 'Chronically low baseline seeking acute stimulation'],
-            ['Task Initiation', 'Low activation energy barrier', 'High friction requiring novelty, urgency, or fear'],
-            ['Blinking Rate', 'Spontaneous 15-20 blinks/min', 'Elevated blinking; correlates with dopamine dips'],
-            ['Recovery State', 'Quick rebound after interruption', '23 minutes needed to recover focus trajectory']
+            ['Tonic Dopamine', 'Low, fragmented circulating baseline', 'Optimized circulating baseline through circadian photic triggers'],
+            ['Task Initiation', 'High friction requiring novelty, urgency, or fear', 'Low activation barrier using visual gaze fixation drills'],
+            ['Blinking Rate', 'Elevated blinking; correlates with dopamine dips', 'Stabilized blinking rate indicating sustained engagement'],
+            ['Recovery State', 'Prolonged cognitive delay after interruptions', 'Rapid 60-second re-anchoring to primary focus target']
           ]
         },
         checkableTakeaways: [
@@ -135,7 +135,7 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
             timestamp: '00:12:45',
             seconds: 765,
             category: 'Key Insight',
-            text: 'ADHD is not an inability to focus; it is a neurological deficit in regulating where focus is allocated.',
+            text: 'Focus is not an inability to try hard; it is an executive skill of regulating where attention is allocated.',
             checked: false,
             penKey: 'star'
           },
@@ -150,8 +150,8 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
           }
         ],
         quickRecall: {
-          question: 'Why does visual gaze fixation directly enhance cognitive focus in an ADHD brain?',
-          answer: 'Because the neural circuits controlling eye position (frontal eye fields) directly overlap with the prefrontal attentional networks. Locking your visual gaze physically commands prefrontal circuits to lock onto the task.',
+          question: 'Why does visual gaze fixation directly enhance cognitive focus?',
+          answer: 'Because the neural circuits controlling eye position (frontal eye fields) directly overlap with prefrontal attentional networks. Locking your visual gaze physically commands prefrontal circuits to lock onto the task.',
           coreTakeaway: 'Focus follows visual gaze. Narrow the eyes to narrow the mind.'
         }
       },
@@ -183,7 +183,7 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
           'Take a 3-minute screen-free gap every 30 minutes to allow spontaneous dopamine replenishment.'
         ],
         comparisonTable: {
-          headers: ['Audio Environment', 'Dopamine Impact', 'ADHD Utility'],
+          headers: ['Audio Environment', 'Dopamine Impact', 'Cognitive Focus Utility'],
           rows: [
             ['Lyrics & Pop Music', 'Causes attention residue & lyrical processing', 'Harmful for high-friction learning'],
             ['White / Brown Noise', 'Suppresses sensory background chatter', 'Excellent for task initiation'],
@@ -372,7 +372,7 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
     generatedAt: 'Master Reference Edition',
     isPreset: true,
     createdAt: 1700000012000,
-    executiveSummary: 'Pleasure and pain are co-localized on the exact same neurological seesaw. In our hyper-digital environment, continuous consumption of cheap digital dopamine summons homeostatic neuroadaptation gremlins that weigh down the pain side, locking the ADHD mind into perpetual restlessness, anxiety, and task paralysis.',
+    executiveSummary: 'Pleasure and pain are co-localized on the exact same neurological seesaw. In our hyper-digital environment, continuous consumption of cheap digital dopamine summons homeostatic neuroadaptation gremlins that weigh down the pain side, locking the modern mind into perpetual restlessness, anxiety, and task paralysis.',
     masterMindmapMermaid: `graph TD
   L1["The Pleasure-Pain Seesaw"] --> L2["The Gremlin Effect"]
   L1 --> L3["Modern Digital Traps"]
@@ -482,7 +482,7 @@ export const MENTAL_HEALTH_GUIDES: StudyTextbook[] = [
           'Implement the 10-Minute Urge Surfing Rule before picking up any digital device.'
         ],
         comparisonTable: {
-          headers: ['Condition', 'Neurotypical Brain Balance', 'ADHD Brain in Dopamine Overload'],
+          headers: ['Condition', 'Homeostatic Equilibrium State', 'Dopamine Overload & Dysregulation State'],
           rows: [
             ['Baseline State', 'Seesaw sits near horizontal level', 'Seesaw chronically tilted to the pain/restless side'],
             ['Reaction to Quiet', 'Neutral calm; reflective thought', 'Intense dysphoria and physical sensory hunger'],

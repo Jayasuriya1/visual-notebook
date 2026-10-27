@@ -9,7 +9,7 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     registerSW({
       immediate: true,
       onRegisteredSW(swUrl) {
-        console.log('ADHD Visual Textbook Service Worker active:', swUrl);
+        console.log('Visual Notebook Service Worker active:', swUrl);
       },
       onRegisterError(error) {
         console.warn('PWA auto-register notice; attempting /sw.js fallback:', error);

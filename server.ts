@@ -5,6 +5,12 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { synthesizeTextbookWithoutAI } from './src/utils/nonAiSynthesizer';
+import { validateAndSanitizeTextbook } from './src/utils/schemaValidation';
+import {
+  deduplicateCaptionSegments,
+  assessTranscriptCoverage,
+  chunkTranscriptForAnalysis
+} from './src/utils/transcriptHelper';
 
 dotenv.config();
 
@@ -62,30 +68,38 @@ app.get('/api/youtube-meta', async (req, res) => {
     });
   } catch (error: any) {
     return res.json({
-      title: 'YouTube Masterclass',
-      author_name: 'Featured Speaker',
+      title: 'YouTube Lecture',
+      author_name: 'Keynote Speaker',
       thumbnail_url: `https://i.ytimg.com/vi/${req.query.videoId}/hqdefault.jpg`
     });
   }
 });
 
-// Curated high-yield transcripts for featured masterclasses to bypass datacenter IP restrictions
-const FEATURED_TRANSCRIPTS: Record<string, { method: string; transcript: string }> = {
+/**
+ * Curated keynote excerpts.
+ * NOTE: These are explicitly labeled as abbreviated excerpts, NOT full transcripts,
+ * to prevent misleading claims of complete transcript coverage.
+ */
+const FEATURED_TRANSCRIPTS: Record<string, { method: string; transcript: string; isExcerpt: boolean }> = {
   'QmOF0crdyRU': {
-    method: 'Curated Masterclass Transcript (Dr. Andrew Huberman, Stanford School of Medicine)',
-    transcript: `Welcome to the Huberman Lab Podcast, where we discuss science and science-based tools for everyday life. I'm Andrew Huberman, and I'm a professor of neurobiology and ophthalmology at Stanford School of Medicine. Today, we are discussing dopamine. Dopamine is a chemical that is responsible for our pursuit, our motivation, and our drive to do things. It is not, as is commonly thought, the molecule of reward or pleasure itself. Pleasure is mediated by endorphins, whereas dopamine is the currency of desire, anticipation, and pursuit. In this lecture, we will cover the difference between tonic baseline dopamine and phasic spikes. When you experience a high-intensity spike from stimulants, chocolate, cold water, or social feeds, your brain burns through synaptic vesicles. The height of your motivation depends on the difference between the peak and the baseline that preceded it. If you stack multiple dopamine inputs like energy drinks, pre-workouts, and loud music before studying, your baseline plunges below normal after 45 minutes, inducing acute ADHD task paralysis. To sustain focus, attach dopamine to the friction of effort itself...`
+    method: 'Curated Keynote Excerpt (Dr. Andrew Huberman, Stanford School of Medicine)',
+    isExcerpt: true,
+    transcript: `Welcome to the Huberman Lab Podcast, where we discuss science and science-based tools for everyday life. I'm Andrew Huberman, and I'm a professor of neurobiology and ophthalmology at Stanford School of Medicine. Today, we are discussing dopamine. Dopamine is a chemical that is responsible for our pursuit, our motivation, and our drive to do things. It is not, as is commonly thought, the molecule of reward or pleasure itself. Pleasure is mediated by endorphins, whereas dopamine is the currency of desire, anticipation, and pursuit. In this lecture, we will cover the difference between tonic baseline dopamine and phasic spikes. When you experience a high-intensity spike from stimulants, chocolate, cold water, or social feeds, your brain burns through synaptic vesicles. The height of your motivation depends on the difference between the peak and the baseline that preceded it. If you stack multiple dopamine inputs like energy drinks, pre-workouts, and loud music before studying, your baseline plunges below normal after 45 minutes, inducing acute task paralysis. To sustain focus, attach dopamine to the friction of effort itself.`
   },
   'E4rTyhYfZhE': {
-    method: 'Curated Masterclass Transcript (Dr. Anna Lembke, Stanford Addiction Medicine)',
-    transcript: `I am Dr. Anna Lembke, professor of psychiatry and behavioral sciences at Stanford University School of Medicine and chief of the Stanford Addiction Medicine Dual Diagnosis Clinic. In Dopamine Nation, we explore the neurobiology of pleasure and pain. Neuroscience has revealed that pleasure and pain are co-located in the same parts of the brain, operating like a teeter-totter or seesaw. Every time you consume digital stimulation, the seesaw tips toward pleasure. In response, homeostatic gremlins jump onto the pain side to push it level. But when the stimulus ends, the gremlins stay on the pain side, causing irritability, anxiety, and craving. To restore equilibrium, we need radical self-binding and a 4-week reset...`
+    method: 'Curated Keynote Excerpt (Dr. Anna Lembke, Stanford Addiction Medicine)',
+    isExcerpt: true,
+    transcript: `I am Dr. Anna Lembke, professor of psychiatry and behavioral sciences at Stanford University School of Medicine and chief of the Stanford Addiction Medicine Dual Diagnosis Clinic. In Dopamine Nation, we explore the neurobiology of pleasure and pain. Neuroscience has revealed that pleasure and pain are co-located in the same parts of the brain, operating like a teeter-totter or seesaw. Every time you consume digital stimulation, the seesaw tips toward pleasure. In response, homeostatic gremlins jump onto the pain side to push it level. But when the stimulus ends, the gremlins stay on the pain side, causing irritability, anxiety, and craving. To restore equilibrium, we need radical self-binding and a 4-week reset.`
   },
   'BzhbDy08u4A': {
-    method: 'Curated Masterclass Transcript (Dr. Russell Barkley, ADHD Pioneer)',
-    transcript: `ADHD is not an attention deficit disorder; it is a blindness to time and an executive function deficit. The prefrontal cortex fails to bridge knowledge to performance at the critical point of performance. Telling someone with ADHD to try harder or remember in their head is like asking a nearsighted person to see without glasses. All executive scaffolding must be externalized into the physical environment with visual analog timers, index cards, and prosthetic cues...`
+    method: 'Curated Keynote Excerpt (Dr. Russell Barkley, Executive Function & Performance)',
+    isExcerpt: true,
+    transcript: `Executive function is not an abstract theory; it is the brain's biological capacity to bridge knowledge to performance at the critical point of action. The prefrontal cortex must externalize cues into the physical environment to close the gap between knowing and doing. Telling someone to simply try harder or remember in their head ignores fundamental cognitive limits. All durable execution scaffolding must be externalized into the physical environment with visual analog timers, index cards, and prosthetic cues.`
   },
   '3uL0q-J9Z-k': {
-    method: 'Curated Masterclass Transcript (Dr. Alok Kanojia, HealthyGamerGG)',
-    transcript: `In this lecture, we dissect why video games hook the ADHD mind while real-world tasks create overwhelming paralysis. Games provide three critical elements: instant micro-feedback (< 500ms), unambiguous metrics (XP and HP bars), and clear singular next actions. Real life is ambiguous and delayed. By adopting gaming mechanics—turning vague projects into micro-quests with sensory feedback—individuals with ADHD can break free from dopamine paralysis...`
+    method: 'Curated Keynote Excerpt (Dr. Alok Kanojia, Motivation Architecture)',
+    isExcerpt: true,
+    transcript: `In this lecture, we dissect why interactive media and video games hook human attention while real-world tasks create overwhelming paralysis. Games provide three critical elements: instant micro-feedback (< 500ms), unambiguous metrics (progress bars and clear scores), and clear singular next actions. Real life is ambiguous and delayed. By adopting structured execution mechanics—turning vague projects into micro-quests with sensory feedback—anyone can break free from task-initiation friction.`
   }
 };
 
@@ -96,16 +110,24 @@ app.get('/api/fetch-transcript', async (req, res) => {
     return res.status(400).json({ error: 'Valid 11-character YouTube videoId required.' });
   }
 
-  // 1. Instant check for curated featured masterclasses
+  // 1. Check for curated featured masterclass excerpts
   if (FEATURED_TRANSCRIPTS[videoId]) {
     const featured = FEATURED_TRANSCRIPTS[videoId];
     const fullText = featured.transcript;
+    const coverage = assessTranscriptCoverage(fullText, featured.method, featured.isExcerpt);
+
     return res.json({
       success: true,
+      status: coverage.status,
+      isCuratedExcerpt: true,
       method: featured.method,
       transcript: fullText,
-      wordCount: fullText.split(/\s+/).filter(Boolean).length,
-      segmentCount: 12
+      wordCount: coverage.wordCount,
+      characterCount: coverage.characterCount,
+      segmentCount: 4,
+      coverageDescription: coverage.coverageDescription,
+      limitations: coverage.limitations,
+      hasTimestamps: false
     });
   }
 
@@ -113,18 +135,26 @@ app.get('/api/fetch-transcript', async (req, res) => {
   // 2. Try youtube-transcript-plus
   try {
     const { fetchTranscript } = await import('youtube-transcript-plus');
-    const segments = await fetchTranscript(videoId, {
+    const rawSegments = await fetchTranscript(videoId, {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
     });
-    if (segments && segments.length > 0) {
-      const fullText = segments.map((s: any) => s.text).join(' ');
+
+    if (rawSegments && rawSegments.length > 0) {
+      const deduplicated = deduplicateCaptionSegments(rawSegments);
+      const fullText = deduplicated.map((s) => s.text).join(' ');
+
       if (fullText.trim().length > 100) {
+        const coverage = assessTranscriptCoverage(fullText, 'youtube-transcript-plus', false);
         return res.json({
           success: true,
+          status: coverage.status,
           method: 'youtube-transcript-plus',
           transcript: fullText,
-          wordCount: fullText.split(/\s+/).filter(Boolean).length,
-          segmentCount: segments.length
+          wordCount: coverage.wordCount,
+          characterCount: coverage.characterCount,
+          segmentCount: deduplicated.length,
+          coverageDescription: coverage.coverageDescription,
+          hasTimestamps: Boolean(deduplicated[0]?.start !== undefined)
         });
       }
     }
@@ -136,15 +166,28 @@ app.get('/api/fetch-transcript', async (req, res) => {
   try {
     const { getSubtitles } = await import('youtube-captions-scraper');
     const captions = await getSubtitles({ videoID: videoId, lang: 'en' });
+
     if (captions && captions.length > 0) {
-      const fullText = captions.map((c: any) => c.text).join(' ');
+      const mappedCaptions = captions.map((c: any) => ({
+        text: String(c.text || ''),
+        start: typeof c.start === 'string' ? parseFloat(c.start) || 0 : Number(c.start) || 0,
+        dur: typeof c.dur === 'string' ? parseFloat(c.dur) || 0 : Number(c.dur) || 0
+      }));
+      const deduplicated = deduplicateCaptionSegments(mappedCaptions);
+      const fullText = deduplicated.map((c) => c.text).join(' ');
+
       if (fullText.trim().length > 100) {
+        const coverage = assessTranscriptCoverage(fullText, 'youtube-captions-scraper', false);
         return res.json({
           success: true,
+          status: coverage.status,
           method: 'youtube-captions-scraper',
           transcript: fullText,
-          wordCount: fullText.split(/\s+/).filter(Boolean).length,
-          segmentCount: captions.length
+          wordCount: coverage.wordCount,
+          characterCount: coverage.characterCount,
+          segmentCount: deduplicated.length,
+          coverageDescription: coverage.coverageDescription,
+          hasTimestamps: Boolean(deduplicated[0]?.start !== undefined)
         });
       }
     }
@@ -179,12 +222,17 @@ app.get('/api/fetch-transcript', async (req, res) => {
         .replace(/<[^>]+>/g, '')
         .replace(/\n+/g, ' ')
         .trim();
+
       if (cleanText.length > 100) {
+        const coverage = assessTranscriptCoverage(cleanText, `invidious-federation (${inst})`, false);
         return {
+          status: coverage.status,
           transcript: cleanText,
           method: `invidious-federation (${inst})`,
-          wordCount: cleanText.split(/\s+/).filter(Boolean).length,
-          segmentCount: meta.captions?.length || 1
+          wordCount: coverage.wordCount,
+          characterCount: coverage.characterCount,
+          segmentCount: meta.captions?.length || 1,
+          coverageDescription: coverage.coverageDescription
         };
       }
       throw new Error('Transcript too short');
@@ -201,12 +249,14 @@ app.get('/api/fetch-transcript', async (req, res) => {
     // All Invidious instances timed out or returned 403
   }
 
-  // 5. Return clean response informing client about cloud IP restriction
+  // 5. Return clean response informing client about host IP restrictions and alternatives
   return res.json({
     success: false,
-    error: 'YouTube automated caption download restricted for this cloud IP.',
+    status: 'unavailable',
+    error: 'YouTube automated caption download is restricted for this cloud IP address.',
     canPasteOrUpload: true,
-    canGenerateWithoutAi: true
+    canGenerateWithoutAi: true,
+    message: 'To analyze this video with 100% source fidelity, paste captions or upload a transcript file in the Analyze tab.'
   });
 });
 
@@ -224,21 +274,37 @@ app.post('/api/generate-guide', async (req, res) => {
     } = req.body;
 
     const apiKey = customApiKey || process.env.GEMINI_API_KEY;
+    const cleanTranscript = (transcript || '').trim();
 
-    // Alternative: Work Done Without AI (Algorithmic Deterministic Engine)
-    // If user explicitly chose 'algorithmic' OR if no Gemini API key is configured
-    if (engineConfig.provider === 'algorithmic' || (!apiKey && engineConfig.provider === 'gemini')) {
-      console.log('[Synthesizer] Synthesizing textbook with Instant Algorithmic Engine (No AI / Offline)...');
+    // Check transcript presence
+    const hasTranscript = cleanTranscript.length >= 100;
+    const coverageMetadata = assessTranscriptCoverage(cleanTranscript);
+
+    // =========================================================================
+    // CASE A: User explicitly requested deterministic mode OR no transcript is available
+    // (Preserves source honesty: NEVER ask AI to invent facts from a title alone)
+    // =========================================================================
+    if (engineConfig.provider === 'algorithmic' || (!apiKey && engineConfig.provider === 'gemini') || !hasTranscript) {
+      console.log('[Synthesizer] Synthesizing textbook with Deterministic Engine...');
       const textbook = synthesizeTextbookWithoutAI({
         videoUrl,
         videoId,
         videoTitle,
         speaker,
-        transcript
+        transcript: cleanTranscript,
+        sourceStatus: hasTranscript
+          ? (coverageMetadata.status === 'failed' ? 'unavailable' : coverageMetadata.status)
+          : 'unavailable',
+        retrievalMethod: hasTranscript ? coverageMetadata.retrievalMethod : 'No spoken transcript provided'
       });
+
       return res.json({
         success: true,
-        engine: 'algorithmic-no-ai',
+        engine: 'algorithmic-deterministic',
+        isFallback: !hasTranscript,
+        fallbackNotice: !hasTranscript
+          ? 'Notice: No transcript was available. Claims, mechanisms, and protocols have been withheld to preserve source honesty.'
+          : undefined,
         textbook
       });
     }
@@ -258,18 +324,22 @@ app.post('/api/generate-guide', async (req, res) => {
       }
     });
 
-    const systemInstruction = `You are an elite Cognitive Neuroscientist, Senior Instructional Architect, and ADHD Textbook Designer.
-Your task is to transform spoken YouTube lecture content into an authoritative, editorial-grade, Warm-Paper Study Textbook.
+    // Transcript-aware chunking strategy for long transcripts (> 35,000 chars)
+    const chunks = chunkTranscriptForAnalysis(cleanTranscript, 32000, 400);
+    const primaryTranscriptText = chunks[0].text;
+    const isMultiChunk = chunks.length > 1;
 
-STRICT FAITHFULNESS & ANTI-VAGUENESS RULES:
-1. ZERO HALLUCINATION: Rely strictly on spoken facts, scientific mechanisms, and numbers from the lecture.
-2. PRESERVE DETAIL: Include 100% of the speaker's core explanations, scientific mechanisms (e.g. neurotransmitters, receptors, tonic vs phasic pools), real-world analogies (e.g. Gremlins on the Seesaw, Mountain Climbers), and concrete numerical data (e.g. 1.5x chocolate, 2.5x cold water, 14-day withdrawal hump). Never invent unrelated content, and never compress explanations into vague 1-liners!
-3. VALID MERMAID DIAGRAMS:
-   - For masterMindmapMermaid: Use valid "graph TD" mapping the whole conceptual architecture.
-   - For each chapter's mermaidDiagram: Use simple, valid "graph TD" or "graph LR" with short node labels wrapped in quotes (e.g. A["Stimulus"] --> B["Dopamine Surge"]), max 4 to 6 nodes. Do NOT use unescaped brackets or special characters inside node texts that break Mermaid syntax!
-4. COMPARISON TABLES: Every chapter must have a structured comparisonTable with 3-4 columns and 3-5 rows contrasting common cognitive traps vs ADHD-aligned neural solutions.
-5. CHECKABLE TAKEAWAYS: Include 3-5 high-yield takeaways with estimated or real timestamps, categorized as 'Key Insight', 'Aha Moment', or 'Action Rule'.
-6. QUICK RECALL QUESTION: Each chapter must include a quickRecall object with a thought-provoking recall question ("prompt"), concise verified "keyAnswer", and brief "coreTakeaway" for active recall testing.
+    // Refactored, non-leading system instruction grounded strictly in source evidence
+    const systemInstruction = `You are a Senior Educational Architect and Science-Grounded Textbook Editor.
+Your task is to transform the provided spoken lecture transcript into an authoritative, clear, and engaging Visual Study Textbook.
+
+STRICT SOURCE-FIDELITY & ANTI-HALLUCINATION RULES:
+1. RELY EXCLUSIVELY ON THE PROVIDED TRANSCRIPT: All factual claims, scientific mechanisms, concepts, and speaker recommendations MUST be directly grounded in the provided spoken transcript. Never introduce pre-learned mechanisms, numbers, or analogies that the speaker does not mention.
+2. PRESERVE UNCERTAINTIES & QUALIFICATIONS: If the speaker expresses doubt, nuances, disagreements, or highlights limitations, preserve those faithful nuances.
+3. ADAPTIVE CHAPTER STRUCTURE: Organize the material into 3 to 6 logical visual chapters matching the speaker's actual progression. Do NOT force every chapter to have the same rigid teaching devices.
+4. HONEST PROVENANCE: For takeaways and key concepts, attribute quotes and claims to the speaker where applicable.
+5. DIAGRAMS & TABLES: Include Mermaid diagrams ("graph TD" or "graph LR") only where they clarify actual conceptual relationships described by the speaker. Wrap node labels in quotes.
+6. DAILY PROTOCOLS: Propose a daily action protocol ONLY if the speaker discusses practical protocols, habits, or routines. If the lecture is purely theoretical, omit dailyProtocol.
 
 You MUST respond strictly with valid JSON conforming to this schema (no surrounding markdown text):
 {
@@ -307,7 +377,8 @@ You MUST respond strictly with valid JSON conforming to this schema (no surround
       "quickRecall": {
         "question": string,
         "answer": string,
-        "coreTakeaway": string
+        "coreTakeaway": string,
+        "explanation": string
       }
     }
   ]
@@ -317,11 +388,14 @@ You MUST respond strictly with valid JSON conforming to this schema (no surround
 Speaker: ${speaker}
 Video URL: ${videoUrl}
 Video ID: ${videoId}
+${isMultiChunk ? `Transcript Coverage Notice: Processing Segment 1 of ${chunks.length} (${chunks[0].approxRange}).` : ''}
 
-Spoken Transcript / Video Context:
-${transcript ? transcript.slice(0, 40000) : `Analyze this video thoroughly based on the exact lecture given by ${speaker} on "${videoTitle}" (${videoUrl}).`}
+Spoken Transcript:
+"""
+${primaryTranscriptText}
+"""
 
-Synthesize the complete, deep, editorial-grade ADHD Visual Textbook according to the strict JSON specification.`;
+Synthesize an evidence-grounded Visual Study Textbook based strictly on the spoken lecture transcript above.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.8-flash',
@@ -346,39 +420,44 @@ Synthesize the complete, deep, editorial-grade ADHD Visual Textbook according to
     const textbookId = 'textbook-' + Date.now();
     const finalVideoId = videoId || extractYouTubeId(videoUrl) || 'custom-video';
 
-    // Hydrate textbook
-    const textbook = {
+    // Build raw candidate textbook
+    const rawCandidate = {
       id: textbookId,
       videoTitle: parsedData.videoTitle || videoTitle,
       speaker: parsedData.speaker || speaker,
-      duration: parsedData.duration || 'Full Masterclass',
+      duration: parsedData.duration || 'Full Lecture',
       videoId: finalVideoId,
       videoUrl: videoUrl || `https://www.youtube.com/watch?v=${finalVideoId}`,
       thumbnailUrl: `https://i.ytimg.com/vi/${finalVideoId}/hqdefault.jpg`,
-      generatedAt: 'User Generated Edition',
+      generatedAt: 'AI Synthesized Edition (Evidence Grounded)',
       isPreset: false,
       createdAt: Date.now(),
-      executiveSummary: parsedData.executiveSummary || 'Authoritative visual textbook breakdown.',
-      masterMindmapMermaid: sanitizeMermaid(parsedData.masterMindmapMermaid || 'graph TD\nA["Lecture Core"] --> B["Key Pillars"]'),
+      executiveSummary: parsedData.executiveSummary || 'Visual textbook breakdown grounded in transcript.',
+      masterMindmapMermaid: sanitizeMermaid(parsedData.masterMindmapMermaid || 'graph TD\nA["Lecture Core"] --> B["Key Concepts"]'),
+      sourceMetadata: {
+        ...coverageMetadata,
+        limitations: isMultiChunk
+          ? `Input was segmented; analyzed primary segment (${chunks[0].approxRange}).`
+          : undefined
+      },
       chapters: (parsedData.chapters || []).map((ch: any, idx: number) => ({
         chapterNumber: ch.chapterNumber || idx + 1,
         title: ch.title || `Chapter ${idx + 1}`,
-        timestampRange: ch.timestampRange || '00:00:00 - 00:15:00',
+        timestampRange: ch.timestampRange || '00:00 - 15:00',
         startSeconds: parseSeconds(ch.timestampRange) || idx * 600,
         coreConcepts: Array.isArray(ch.coreConcepts) ? ch.coreConcepts : [ch.coreConcepts || ''],
         anchorKeywords: Array.isArray(ch.anchorKeywords) ? ch.anchorKeywords : [],
-        mentalModelTitle: ch.mentalModelTitle || 'Conceptual Model',
-        mentalModelExplanation: ch.mentalModelExplanation || '',
-        mermaidDiagram: sanitizeMermaid(ch.mermaidDiagram || 'graph TD\nA["Input"] --> B["Output"]'),
-        theTrap: {
-          title: ch.theTrap?.title || 'Common Misconception',
-          description: ch.theTrap?.description || 'Why traditional intuition fails.'
-        },
-        actionSteps: Array.isArray(ch.actionSteps) ? ch.actionSteps : [ch.actionSteps || ''],
-        comparisonTable: {
-          headers: ch.comparisonTable?.headers || ['Aspect', 'Cognitive Trap', 'Neural Protocol'],
-          rows: ch.comparisonTable?.rows || []
-        },
+        mentalModelTitle: ch.mentalModelTitle || undefined,
+        mentalModelExplanation: ch.mentalModelExplanation || undefined,
+        mermaidDiagram: ch.mermaidDiagram ? sanitizeMermaid(ch.mermaidDiagram) : undefined,
+        theTrap: ch.theTrap ? {
+          title: ch.theTrap.title || 'Key Consideration',
+          description: ch.theTrap.description || ''
+        } : undefined,
+        actionSteps: Array.isArray(ch.actionSteps) && ch.actionSteps.length > 0 ? ch.actionSteps : undefined,
+        comparisonTable: ch.comparisonTable && Array.isArray(ch.comparisonTable.headers) && Array.isArray(ch.comparisonTable.rows)
+          ? ch.comparisonTable
+          : undefined,
         checkableTakeaways: (ch.checkableTakeaways || []).map((t: any, tIdx: number) => ({
           id: `takeaway-${textbookId}-${idx}-${tIdx}`,
           timestamp: t.timestamp || '00:00',
@@ -389,14 +468,22 @@ Synthesize the complete, deep, editorial-grade ADHD Visual Textbook according to
           penKey: 'star'
         })),
         quickRecall: ch.quickRecall ? {
-          question: ch.quickRecall.question || 'What is the core biological mechanism described in this chapter?',
-          answer: ch.quickRecall.answer || 'Refer to the core concepts above.',
-          coreTakeaway: ch.quickRecall.coreTakeaway || ch.mentalModelTitle || 'Core insight'
+          question: ch.quickRecall.question || 'What is the core distinction described in this chapter?',
+          answer: ch.quickRecall.answer || 'Refer to the chapter summary.',
+          coreTakeaway: ch.quickRecall.coreTakeaway || '',
+          explanation: ch.quickRecall.explanation || undefined
         } : undefined
       }))
     };
 
-    return res.json({ success: true, textbook });
+    // Runtime validation with Zod
+    const validated = validateAndSanitizeTextbook(rawCandidate);
+
+    return res.json({
+      success: true,
+      textbook: validated.textbook,
+      validationWarnings: validated.errors
+    });
   } catch (error: any) {
     console.error('Error in /api/generate-guide:', error);
     return res.status(500).json({
@@ -416,10 +503,8 @@ function parseSeconds(timestampStr: string): number {
   const match = timestampStr.match(/(\d+):(\d+)(?::(\d+))?/);
   if (!match) return 0;
   if (match[3]) {
-    // HH:MM:SS
     return parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]);
   }
-  // MM:SS
   return parseInt(match[1]) * 60 + parseInt(match[2]);
 }
 
@@ -450,10 +535,8 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`ADHD Visual Textbook server active on http://0.0.0.0:${PORT}`);
+    console.log(`[Server] Visual Notebook server running at http://localhost:${PORT}`);
   });
 }
 
-startServer().catch((err) => {
-  console.error('Server startup error:', err);
-});
+startServer();

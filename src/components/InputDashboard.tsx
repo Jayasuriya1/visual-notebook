@@ -42,8 +42,15 @@ export const InputDashboard: React.FC<InputDashboardProps> = ({
   const [speaker, setSpeaker] = useState('Dr. Andrew Huberman, Ph.D.');
   const [isFetchingMeta, setIsFetchingMeta] = useState(false);
   const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
-  const [transcriptStatus, setTranscriptStatus] = useState<'idle' | 'detected' | 'restricted' | 'manual'>('idle');
-  const [transcriptInfo, setTranscriptInfo] = useState<{ wordCount?: number; method?: string }>({});
+  const [transcriptStatus, setTranscriptStatus] = useState<
+    'idle' | 'verified_full' | 'curated_summary' | 'verified_partial' | 'restricted' | 'manual'
+  >('idle');
+  const [transcriptInfo, setTranscriptInfo] = useState<{
+    wordCount?: number;
+    method?: string;
+    isCuratedSummary?: boolean;
+    coveragePct?: number;
+  }>({});
   const [transcript, setTranscript] = useState('');
   const [showTranscriptDrawer, setShowTranscriptDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
@@ -105,10 +112,18 @@ export const InputDashboard: React.FC<InputDashboardProps> = ({
           const trData = await trRes.json();
           if (trData.success && trData.transcript) {
             setTranscript(trData.transcript);
-            setTranscriptStatus('detected');
+            const status: 'verified_full' | 'curated_summary' | 'verified_partial' =
+              trData.status === 'curated_summary' || trData.isCuratedSummary
+                ? 'curated_summary'
+                : trData.status === 'verified_partial'
+                ? 'verified_partial'
+                : 'verified_full';
+            setTranscriptStatus(status);
             setTranscriptInfo({
               wordCount: trData.wordCount,
-              method: trData.method
+              method: trData.method,
+              isCuratedSummary: trData.isCuratedSummary,
+              coveragePct: trData.coveragePct
             });
             setShowTranscriptDrawer(false);
           } else {
@@ -230,13 +245,13 @@ export const InputDashboard: React.FC<InputDashboardProps> = ({
         <div className="border-b-2 border-black pb-4">
           <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase text-amber-700 mb-1">
             <Sparkles className="w-4 h-4 text-amber-600" />
-            <span>ADHD High-Yield Learning Pipeline</span>
+            <span>Applied Knowledge Engine · Retention Pipeline</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-black font-sans-custom">
-            Transform Any YouTube Video into an ADHD Visual Textbook
+            “Knowledge isn’t power. Applied knowledge is.”
           </h2>
-          <p className="text-sm text-slate-700 mt-1">
-            Generate warm-paper study guides structured for neuro-divergent focus. Works 100% offline or with AI models, featuring Mermaid diagrams, cognitive traps, and active recall flashcards.
+          <p className="text-sm text-slate-700 mt-1 leading-relaxed">
+            Most people read or watch a video, nod their heads… and forget it by next week. We solve that: transform passive consumption into indelible visual mental models, time-anchored daily action protocols, and active retrieval practice.
           </p>
         </div>
 
@@ -334,14 +349,14 @@ export const InputDashboard: React.FC<InputDashboardProps> = ({
               onClick={() => onSelectPreset('barkley-adhd-executive-function')}
               className="px-2 py-1 bg-white hover:bg-slate-50 border border-black rounded font-bold transition-colors cursor-pointer text-[11px]"
             >
-              Dr. Barkley (ADHD Clock)
+              Dr. Barkley (Action Scaffolding)
             </button>
             <button
               type="button"
               onClick={() => onSelectPreset('healthygamer-adhd-motivation')}
               className="px-2 py-1 bg-white hover:bg-slate-50 border border-black rounded font-bold transition-colors cursor-pointer text-[11px]"
             >
-              Dr. K (Gaming Focus)
+              Dr. K (Motivation Architecture)
             </button>
           </div>
         </div>
@@ -427,12 +442,12 @@ export const InputDashboard: React.FC<InputDashboardProps> = ({
                     <span className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
                     <span>Querying YouTube transcript engines...</span>
                   </div>
-                ) : transcriptStatus === 'detected' ? (
+                ) : transcriptStatus === 'verified_full' ? (
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-emerald-50 border border-emerald-300 rounded text-xs font-mono text-emerald-900">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span className="font-bold">
-                        Transcript Verified ({transcriptInfo.wordCount?.toLocaleString() || wordCount} words)
+                        Full Transcript Verified ({transcriptInfo.wordCount?.toLocaleString() || wordCount} words)
                       </span>
                       <span className="text-emerald-700 hidden sm:inline">· Exact spoken quotes & timestamps loaded</span>
                     </div>
@@ -444,17 +459,72 @@ export const InputDashboard: React.FC<InputDashboardProps> = ({
                       {showTranscriptDrawer ? 'Hide Source' : 'Inspect Source'}
                     </button>
                   </div>
+                ) : transcriptStatus === 'curated_summary' ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-amber-50 border border-amber-300 rounded text-xs font-mono text-amber-950">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="font-bold">
+                        Curated Excerpt Loaded ({transcriptInfo.wordCount?.toLocaleString() || wordCount} words)
+                      </span>
+                      <span className="text-amber-800 text-[11px]">
+                        (Abbreviated source summary for testing, not full spoken transcript)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTranscriptDrawer(!showTranscriptDrawer)}
+                      className="underline font-bold hover:text-black cursor-pointer text-left sm:text-right"
+                    >
+                      {showTranscriptDrawer ? 'Hide Excerpt' : 'Inspect Excerpt'}
+                    </button>
+                  </div>
+                ) : transcriptStatus === 'verified_partial' ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-amber-50 border border-amber-300 rounded text-xs font-mono text-amber-950">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="font-bold">
+                        Partial Transcript ({transcriptInfo.wordCount?.toLocaleString() || wordCount} words)
+                      </span>
+                      <span className="text-amber-800 text-[11px]">
+                        (Initial segments loaded; coverage is partial)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTranscriptDrawer(!showTranscriptDrawer)}
+                      className="underline font-bold hover:text-black cursor-pointer text-left sm:text-right"
+                    >
+                      {showTranscriptDrawer ? 'Hide Source' : 'Inspect Source'}
+                    </button>
+                  </div>
+                ) : transcriptStatus === 'manual' ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-blue-50 border border-blue-300 rounded text-xs font-mono text-blue-950">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="font-bold">
+                        User-Supplied Transcript ({wordCount.toLocaleString()} words)
+                      </span>
+                      <span className="text-blue-700 hidden sm:inline">· Ready for evidence-grounded synthesis</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTranscriptDrawer(!showTranscriptDrawer)}
+                      className="underline font-bold hover:text-black cursor-pointer text-left sm:text-right"
+                    >
+                      {showTranscriptDrawer ? 'Hide Source' : 'Inspect Source'}
+                    </button>
+                  </div>
                 ) : transcriptStatus === 'restricted' ? (
                   /* Proactive Alternative Solutions Card when Cloud IP is Restricted */
-                  <div className="p-3 bg-amber-50 border-2 border-amber-400 rounded text-xs font-mono space-y-2 text-amber-950">
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs font-mono space-y-2 text-amber-950">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                       <div className="flex-1">
                         <span className="font-bold block">
                           YouTube automated caption download restricted for this cloud IP.
                         </span>
-                        <span className="text-slate-700 text-[11px] block mt-0.5">
-                          YouTube restricts automated scrapers from cloud datacenters. You can generate instantly without AI, or paste your transcript in 1 click:
+                        <span className="text-slate-700 text-[11px] block mt-0.5 leading-relaxed">
+                          For evidence-grounded synthesis with real quotes and mechanisms, paste captions below or upload a file. If you proceed without captions, honest heuristic mode will structure available title metadata without fabricating claims.
                         </span>
                       </div>
                     </div>
@@ -468,14 +538,14 @@ export const InputDashboard: React.FC<InputDashboardProps> = ({
                         className="px-3 py-1.5 bg-black hover:bg-slate-800 text-white rounded font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                       >
                         <Zap className="w-3.5 h-3.5 text-amber-400" />
-                        <span>⚡ Generate Without AI Now</span>
+                        <span>⚡ Generate Heuristic Guide</span>
                       </button>
 
                       {/* Solution 2: 1-Click Clipboard Paste */}
                       <button
                         type="button"
                         onClick={handlePasteFromClipboard}
-                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-black border border-black rounded font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-black border border-slate-300 rounded font-bold flex items-center gap-1 cursor-pointer transition-colors"
                       >
                         <Clipboard className="w-3.5 h-3.5 text-slate-700" />
                         <span>📋 Paste from Clipboard</span>
@@ -703,12 +773,12 @@ export const InputDashboard: React.FC<InputDashboardProps> = ({
               ) : provider === 'algorithmic' ? (
                 <>
                   <Zap className="w-5 h-5 text-amber-400" />
-                  <span>⚡ Synthesize ADHD Visual Textbook (Instant Algorithmic - No AI)</span>
+                  <span>⚡ Synthesize Applied Knowledge Textbook (Instant Algorithmic - No AI)</span>
                 </>
               ) : provider === 'gemini' ? (
                 <>
                   <Sparkles className="w-5 h-5 text-amber-400" />
-                  <span>🤖 Synthesize ADHD Visual Textbook (Gemini 3.8 Flash)</span>
+                  <span>🤖 Synthesize Applied Knowledge Textbook (Gemini 3.8 Flash)</span>
                 </>
               ) : (
                 <>

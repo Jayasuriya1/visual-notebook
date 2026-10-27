@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * Transforms plain text into ADHD-friendly Bionic Reading format by
+ * Transforms plain text into high-focus Bionic Reading format by
  * emphasizing the initial fixation syllables of words to guide the eye.
  */
 export function renderBionicText(text: string, enabled: boolean): React.ReactNode {

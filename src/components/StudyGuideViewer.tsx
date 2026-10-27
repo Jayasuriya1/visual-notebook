@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StudyTextbook, FontPreference, FontSizePreference, PaperTheme, TextbookChapter } from '../types';
+import {
+  StudyTextbook,
+  FontPreference,
+  FontSizePreference,
+  PaperTheme,
+  TextbookChapter,
+  ChapterBlock,
+  SourceMetadata,
+  ChapterRecall
+} from '../types';
 import { InteractiveMindmap } from './InteractiveMindmap';
 import { renderBionicText } from '../utils/bionicReading';
 import {
@@ -35,8 +44,32 @@ import {
   Award,
   Zap,
   ArrowRight,
-  Headphones
+  Headphones,
+  ShieldCheck,
+  AlertTriangle,
+  Info,
+  CheckCircle2
 } from 'lucide-react';
+
+/** Timezone-safe local ISO date (YYYY-MM-DD) avoiding UTC midnight flip bugs */
+export const getLocalDateStr = (d: Date = new Date()): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+/** Motion-conscious confetti respecting prefers-reduced-motion */
+export const safeConfetti = (opts: confetti.Options = {}) => {
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return;
+  }
+  try {
+    confetti(opts);
+  } catch {
+    // Non-fatal if canvas unavailable
+  }
+};
 
 interface StudyGuideViewerProps {
   textbook: StudyTextbook;
@@ -90,8 +123,8 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
 
-  // Daily Action Protocol tracking states (keyed by date so users can track daily adherence)
-  const todayDateStr = new Date().toISOString().slice(0, 10);
+  // Daily Action Protocol tracking states (keyed by local date so users can track daily adherence)
+  const todayDateStr = getLocalDateStr();
   const protocolStorageKey = `adhd_daily_protocol_${textbook.id}_${todayDateStr}`;
   const [completedProtocolBlocks, setCompletedProtocolBlocks] = useState<Record<string, boolean>>(() => {
     try {
@@ -101,6 +134,35 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
       return {};
     }
   });
+
+  // Retrieval Practice Self-Evaluations: { [chapterNumber]: 'got_it' | 'partial' | 'review' }
+  const recallStorageKey = `adhd_recall_eval_${textbook.id}`;
+  const [recallEvaluations, setRecallEvaluations] = useState<Record<number, 'got_it' | 'partial' | 'review'>>(() => {
+    try {
+      const saved = localStorage.getItem(recallStorageKey);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Re-sync local storage states whenever textbook.id or local date changes
+  useEffect(() => {
+    try {
+      const pSaved = localStorage.getItem(protocolStorageKey);
+      setCompletedProtocolBlocks(pSaved ? JSON.parse(pSaved) : {});
+    } catch {
+      setCompletedProtocolBlocks({});
+    }
+
+    try {
+      const rSaved = localStorage.getItem(recallStorageKey);
+      setRecallEvaluations(rSaved ? JSON.parse(rSaved) : {});
+    } catch {
+      setRecallEvaluations({});
+    }
+  }, [textbook.id, protocolStorageKey, recallStorageKey]);
+
   const [copiedProtocol, setCopiedProtocol] = useState(false);
 
   const pauseTimerRef = useRef<number | null>(null);
@@ -399,20 +461,20 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
   const handleToggleProtocolBlock = (blockId: string) => {
     setCompletedProtocolBlocks((prev) => {
       const next = { ...prev, [blockId]: !prev[blockId] };
-      localStorage.setItem(protocolStorageKey, JSON.stringify(next));
+      try {
+        localStorage.setItem(protocolStorageKey, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
 
       const checked = Object.values(next).filter(Boolean).length;
       if (totalProtocolBlocks > 0 && checked === totalProtocolBlocks) {
-        try {
-          confetti({
-            particleCount: 80,
-            spread: 70,
-            origin: { y: 0.7 },
-            colors: ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6']
-          });
-        } catch {
-          // ignore
-        }
+        safeConfetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.7 },
+          colors: ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6']
+        });
       }
       return next;
     });
@@ -420,7 +482,11 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
 
   const handleResetProtocolBlocks = () => {
     setCompletedProtocolBlocks({});
-    localStorage.removeItem(protocolStorageKey);
+    try {
+      localStorage.removeItem(protocolStorageKey);
+    } catch {
+      // ignore
+    }
   };
 
   const handleCopyProtocol = () => {
@@ -479,38 +545,50 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
     setFlippedCards((prev) => ({ ...prev, [chIdx]: !prev[chIdx] }));
   };
 
-  const handleMarkRecallMastered = (chIdx: number) => {
-    setMasteredRecalls((prev) => ({ ...prev, [chIdx]: true }));
-    try {
-      confetti({
-        particleCount: 50,
-        spread: 60,
+  // Self-assessed active recall evaluation handler
+  const handleRateRecall = (chapterNumber: number, rating: 'got_it' | 'partial' | 'review') => {
+    setRecallEvaluations((prev) => {
+      const next = { ...prev, [chapterNumber]: rating };
+      try {
+        localStorage.setItem(recallStorageKey, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    if (rating === 'got_it') {
+      safeConfetti({
+        particleCount: 45,
+        spread: 55,
         origin: { y: 0.8 },
-        colors: ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6']
+        colors: ['#10B981', '#34D399', '#059669']
       });
-    } catch {
-      // ignore
     }
   };
 
-  // Check if all takeaways in the whole textbook are complete
+  // Two-tiered learning outcomes measurement:
+  // 1. Reviewed Insights (passive takeaway checkoffs)
   const allTakeaways = textbook.chapters.flatMap((c) => c.checkableTakeaways);
   const checkedCount = allTakeaways.filter((t) => t.checked).length;
   const totalCount = allTakeaways.length;
   const progressPercent = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
 
+  // 2. Retrieval Practice (active test-and-evaluate self-assessment)
+  const totalRecallChapters = textbook.chapters.filter((c) => c.quickRecall).length;
+  const evaluatedRecallCount = Object.keys(recallEvaluations).length;
+  const gotItCount = Object.values(recallEvaluations).filter((v) => v === 'got_it').length;
+  const partialCount = Object.values(recallEvaluations).filter((v) => v === 'partial').length;
+  const reviewCount = Object.values(recallEvaluations).filter((v) => v === 'review').length;
+
   const handleTakeawayClick = (chIdx: number, takeawayId: string) => {
     onToggleTakeaway(chIdx, takeawayId);
-    if (checkedCount + 1 === totalCount) {
-      try {
-        confetti({
-          particleCount: 100,
-          spread: 80,
-          origin: { y: 0.6 }
-        });
-      } catch {
-        // ignore
-      }
+    if (checkedCount + 1 === totalCount && totalCount > 0) {
+      safeConfetti({
+        particleCount: 90,
+        spread: 80,
+        origin: { y: 0.6 }
+      });
     }
   };
 
@@ -530,18 +608,75 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
     <>
       <article
         id="textbook-document"
-        className={`max-w-[920px] mx-auto ${
+        className={`max-w-[840px] mx-auto ${
           isWarm ? 'bg-[#FFFDF9]' : 'bg-[#FFFFFF]'
-        } text-[#111827] shadow-xl border-2 border-black rounded-lg p-4 sm:p-7 md:p-10 my-4 sm:my-8 print-page-sheet ${fontClass} transition-colors duration-200 pb-28`}
+        } text-[#111827] shadow-lg border border-slate-300 rounded-xl p-4 sm:p-7 md:p-9 my-4 sm:my-8 print-page-sheet ${fontClass} transition-colors duration-200 pb-28`}
       >
+        {/* Fallback Notice Banner (When fallback synthesis was utilized) */}
+        {(textbook.isFallback || textbook.fallbackNotice) && (
+          <div className="mb-6 p-4 bg-amber-50/90 border border-amber-300 rounded-lg text-xs font-mono text-amber-950 flex items-start gap-3 no-print">
+            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold block uppercase tracking-wider text-[11px] text-amber-900">
+                Heuristic Synthesis Active (Honest Notice)
+              </span>
+              <p className="text-amber-900/90 text-xs leading-relaxed font-sans-custom">
+                {textbook.fallbackNotice ||
+                  'This study guide was synthesized without full neural model confirmation. Chapters and study prompts are derived directly from the available transcript or title metadata without invented scientific claims.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* 1. Textbook Meta Kicker & Title Header */}
-        <section className="border-b-2 border-black pb-6 mb-8 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/20 pb-2.5 text-xs font-mono">
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold uppercase bg-black text-white px-2 py-0.5 rounded-xs tracking-wider">
-                ADHD VISUAL TEXTBOOK
+        <section className="border-b border-slate-300 pb-6 mb-8 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5 text-xs font-mono">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-extrabold uppercase bg-black text-white px-2 py-0.5 rounded text-[11px] tracking-wider">
+                VISUAL NOTEBOOK · APPLIED KNOWLEDGE
               </span>
               <span className="text-slate-600">Edition: {textbook.generatedAt}</span>
+              {/* Provenance Badge */}
+              {textbook.sourceMetadata && (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                  textbook.sourceMetadata.status === 'verified_full'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : textbook.sourceMetadata.status === 'curated_summary'
+                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                    : textbook.sourceMetadata.status === 'verified_partial'
+                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                    : textbook.sourceMetadata.status === 'user_supplied'
+                    ? 'bg-blue-50 text-blue-800 border-blue-300'
+                    : 'bg-slate-100 text-slate-700 border-slate-300'
+                }`}>
+                  {textbook.sourceMetadata.status === 'verified_full' ? (
+                    <>
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      <span>Verified Transcript ({textbook.sourceMetadata.wordCount?.toLocaleString() || 'Full'} words)</span>
+                    </>
+                  ) : textbook.sourceMetadata.status === 'curated_summary' ? (
+                    <>
+                      <Info className="w-3 h-3 text-amber-600" />
+                      <span>Curated Excerpt (Abbreviated Source)</span>
+                    </>
+                  ) : textbook.sourceMetadata.status === 'verified_partial' ? (
+                    <>
+                      <AlertTriangle className="w-3 h-3 text-amber-600" />
+                      <span>Partial Transcript ({textbook.sourceMetadata.wordCount?.toLocaleString() || 'Segment'} words)</span>
+                    </>
+                  ) : textbook.sourceMetadata.status === 'user_supplied' ? (
+                    <>
+                      <ShieldCheck className="w-3 h-3 text-blue-600" />
+                      <span>User Transcript ({textbook.sourceMetadata.wordCount?.toLocaleString() || 'Custom'} words)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Info className="w-3 h-3 text-slate-500" />
+                      <span>Metadata Only (Heuristic Synthesis)</span>
+                    </>
+                  )}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-3 text-slate-700">
@@ -581,7 +716,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
               <button
                 type="button"
                 onClick={handleStartFullTextbookAudio}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-950 border border-black rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-950 border border-black/30 rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print"
                 title="Listen to full textbook narration with synchronized sentence highlighting"
               >
                 <Headphones className="w-3.5 h-3.5 text-amber-800" />
@@ -597,10 +732,10 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                     const el = document.getElementById('daily-protocol-chapter');
                     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   }}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-black rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 border rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print ${
                     activeChapterTab === 'protocol'
-                      ? 'bg-amber-400 text-black ring-2 ring-black font-extrabold'
-                      : 'bg-amber-100 hover:bg-amber-200 text-amber-950'
+                      ? 'bg-amber-400 text-black border-black ring-1 ring-black font-extrabold'
+                      : 'bg-amber-100 hover:bg-amber-200 text-amber-950 border-black/30'
                   }`}
                   title="Open isolated Daily Action Protocol chapter"
                 >
@@ -617,7 +752,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                     setActiveChapterTab('protocol');
                     handleStartDailyProtocolAudio();
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border border-black rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-950 border border-black/30 rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print"
                   title="Listen to the daily action protocol (What to do vs what not to do)"
                 >
                   <Volume2 className="w-3.5 h-3.5 text-emerald-800" />
@@ -635,10 +770,10 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                     handleOpenAudioPlayer();
                   }
                 }}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 border border-black rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 border rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print ${
                   isAudioPlayerOpen
-                    ? 'bg-black text-white hover:bg-slate-800'
-                    : 'bg-white hover:bg-slate-100 text-slate-800'
+                    ? 'bg-black text-white hover:bg-slate-800 border-black'
+                    : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
                 }`}
                 title={isAudioPlayerOpen ? 'Close bottom audio player panel' : 'Open bottom audio player panel'}
               >
@@ -650,7 +785,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                 <button
                   type="button"
                   onClick={onDownloadMarkdown}
-                  className="sm:ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FEF3C7] hover:bg-[#FDE68A] text-amber-950 border border-black rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print"
+                  className="sm:ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FEF3C7] hover:bg-[#FDE68A] text-amber-950 border border-black/30 rounded text-xs font-mono font-bold shadow-2xs transition-all active:scale-95 cursor-pointer no-print"
                   title="Download entire study guide in Markdown (.md) format with full YouTube source attribution"
                 >
                   <FileDown className="w-3.5 h-3.5 text-amber-800" />
@@ -661,7 +796,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
           </div>
 
           {/* Executive Summary Callout with Synchronized Audio Sentences */}
-          <div className="p-4 sm:p-5 summary-box rounded-md space-y-1.5 border border-black/30">
+          <div className="p-4 sm:p-5 summary-box rounded-lg space-y-1.5 border border-amber-200/80 bg-amber-50/60">
             <div className="flex items-center justify-between">
               <div className="text-xs font-mono font-extrabold uppercase tracking-wider text-black flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
@@ -672,7 +807,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
               </span>
             </div>
 
-            <p className={`${bodySizeClass} font-medium text-slate-900 max-w-[75ch] leading-relaxed`}>
+            <p className={`${bodySizeClass} font-medium text-slate-900 max-w-[72ch] leading-relaxed`}>
               {splitIntoSentences(textbook.executiveSummary).map((sent, sIdx) => {
                 const unitId = `textbook-summary-s${sIdx}`;
                 const isCurrent = activeSpeechUnitId === unitId;
@@ -701,20 +836,36 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
             </p>
           </div>
 
-          {/* Cognitive Accessibility Toolbar (No-Print) */}
-          <div className="p-3 bg-white border-2 border-black rounded-md space-y-3 no-print shadow-2xs">
+          {/* Cognitive Learning & Accessibility Toolbar (No-Print) */}
+          <div className="p-3.5 bg-white border border-slate-300 rounded-lg space-y-3 no-print shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-              {/* Active Mastery Stats */}
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold uppercase text-black flex items-center gap-1">
-                  <span>🧠 Active Mastery:</span>
-                  <span className="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded font-bold">
-                    {progressPercent}%
+              {/* Evidence-Grounded Two-Tier Learning Metrics */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold uppercase text-slate-700 flex items-center gap-1">
+                    <span>📖 Reviewed:</span>
+                    <span className="bg-slate-100 text-slate-800 border border-slate-300 px-1.5 py-0.5 rounded font-bold">
+                      {progressPercent}%
+                    </span>
                   </span>
-                </span>
-                <span className="text-slate-600 font-medium">
-                  ({checkedCount}/{totalCount} Insights Mastered)
-                </span>
+                  <span className="text-slate-600 font-medium">
+                    ({checkedCount}/{totalCount} Key Insights)
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold uppercase text-slate-700 flex items-center gap-1">
+                    <span>🎯 Active Recall:</span>
+                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded font-bold">
+                      {evaluatedRecallCount}/{totalRecallChapters} Tested
+                    </span>
+                  </span>
+                  {evaluatedRecallCount > 0 && (
+                    <span className="text-slate-600 text-[11px]">
+                      ({gotItCount} 🟢 · {partialCount} 🟡 · {reviewCount} 🟠)
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Cognitive Reading Enhancers */}
@@ -725,7 +876,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                   onClick={() => setBionicReading(!bionicReading)}
                   className={`px-2.5 py-1 rounded border text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
                     bionicReading
-                      ? 'bg-amber-100 border-black text-black shadow-2xs'
+                      ? 'bg-amber-100 border-amber-400 text-black shadow-2xs'
                       : 'bg-slate-50 border-slate-300 text-slate-700 hover:border-black'
                   }`}
                   title="Bionic Reading bolds the first letters of words to anchor visual fixation"
@@ -740,7 +891,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                   onClick={() => setFocusMode(!focusMode)}
                   className={`px-2.5 py-1 rounded border text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
                     focusMode
-                      ? 'bg-amber-100 border-black text-black shadow-2xs'
+                      ? 'bg-amber-100 border-amber-400 text-black shadow-2xs'
                       : 'bg-slate-50 border-slate-300 text-slate-700 hover:border-black'
                   }`}
                   title="Chapter Focus Mode hides all other chapters to eliminate visual scrolling fatigue"
@@ -751,12 +902,44 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
               </div>
             </div>
 
-            {/* Mastery Progress Bar */}
-            <div className="w-full h-2.5 bg-slate-100 border border-black rounded-full overflow-hidden">
-              <div
-                className="h-full bg-emerald-600 transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
+            {/* Dual Learning Progress Indicators */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <div>
+                <div className="flex justify-between text-[10px] font-mono text-slate-500 mb-0.5">
+                  <span>Insight Checkoff Progress</span>
+                  <span>{progressPercent}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 border border-slate-300 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-slate-600 transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-[10px] font-mono text-slate-500 mb-0.5">
+                  <span>Active Recall Tested</span>
+                  <span>{totalRecallChapters > 0 ? Math.round((evaluatedRecallCount / totalRecallChapters) * 100) : 0}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 border border-slate-300 rounded-full overflow-hidden flex">
+                  <div
+                    className="h-full bg-emerald-600 transition-all duration-300"
+                    style={{ width: `${totalRecallChapters > 0 ? (gotItCount / totalRecallChapters) * 100 : 0}%` }}
+                    title={`${gotItCount} Confident`}
+                  />
+                  <div
+                    className="h-full bg-amber-500 transition-all duration-300"
+                    style={{ width: `${totalRecallChapters > 0 ? (partialCount / totalRecallChapters) * 100 : 0}%` }}
+                    title={`${partialCount} Partially Understood`}
+                  />
+                  <div
+                    className="h-full bg-orange-400 transition-all duration-300"
+                    style={{ width: `${totalRecallChapters > 0 ? (reviewCount / totalRecallChapters) * 100 : 0}%` }}
+                    title={`${reviewCount} Need Review`}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1369,7 +1552,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                   </h3>
 
                   <p className={`${bodySizeClass} max-w-[75ch] text-slate-900 italic leading-relaxed`}>
-                    "{splitIntoSentences(chapter.mentalModelExplanation).map((sent, sIdx) => {
+                    "{chapter.mentalModelExplanation && splitIntoSentences(chapter.mentalModelExplanation).map((sent, sIdx) => {
                       const unitId = `chapter-${chapter.chapterNumber}-model-desc-s${sIdx}`;
                       const isCurrent = activeSpeechUnitId === unitId;
 
@@ -1408,132 +1591,136 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                 )}
 
                 {/* 4. ⚡ IMMEDIATE ACTION PROTOCOL (Tactile Steps Pipeline with Read-Along Highlight) */}
-                <div className="callout-action p-5 rounded-md space-y-3 print-avoid-break border border-black/30">
-                  <div className="flex items-center justify-between text-xs font-mono font-extrabold uppercase tracking-wider text-black">
-                    <span className="flex items-center gap-2">
-                      <span className="text-base">⚡</span>
-                      <span>IMMEDIATE ACTION PROTOCOL (TACTILE STEPS)</span>
-                    </span>
-                    <span className="text-slate-600 font-normal">Physical implementation</span>
-                  </div>
+                {chapter.actionSteps && chapter.actionSteps.length > 0 && (
+                  <div className="callout-action p-5 rounded-md space-y-3 print-avoid-break border border-black/30">
+                    <div className="flex items-center justify-between text-xs font-mono font-extrabold uppercase tracking-wider text-black">
+                      <span className="flex items-center gap-2">
+                        <span className="text-base">⚡</span>
+                        <span>IMMEDIATE ACTION PROTOCOL (TACTILE STEPS)</span>
+                      </span>
+                      <span className="text-slate-600 font-normal">Physical implementation</span>
+                    </div>
 
-                  <div className="space-y-3 pt-1">
-                    {chapter.actionSteps.map((step, sIdx) => {
-                      const unitId = `chapter-${chapter.chapterNumber}-action-${sIdx}`;
-                      const isCurrent = activeSpeechUnitId === unitId;
-                      const stepKey = `step-${chapter.chapterNumber}-${sIdx}`;
-                      const isCopied = copiedStep === stepKey;
+                    <div className="space-y-3 pt-1">
+                      {chapter.actionSteps.map((step, sIdx) => {
+                        const unitId = `chapter-${chapter.chapterNumber}-action-${sIdx}`;
+                        const isCurrent = activeSpeechUnitId === unitId;
+                        const stepKey = `step-${chapter.chapterNumber}-${sIdx}`;
+                        const isCopied = copiedStep === stepKey;
 
-                      return (
-                        <div
-                          key={sIdx}
-                          id={unitId}
-                          onClick={() => handleJumpToUnit(unitId, chapter.chapterNumber)}
-                          className={`flex items-start justify-between gap-3 p-3 rounded transition-all duration-150 group cursor-pointer ${
-                            isCurrent
-                              ? 'bg-amber-100/90 border-2 border-amber-600 ring-2 ring-amber-400 shadow-md'
-                              : 'bg-white border border-black hover:border-amber-700 shadow-2xs'
-                          }`}
-                          title="Click to start listening to this step"
-                        >
-                          <div className="flex items-start gap-3">
-                            <span
-                              className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0 mt-0.5 ${
-                                isCurrent
-                                  ? 'bg-amber-700 text-white animate-pulse'
-                                  : 'bg-black text-white'
-                              }`}
-                            >
-                              {sIdx + 1}
-                            </span>
-                            <p className={`${bodySizeClass} max-w-[70ch] font-medium text-slate-900`}>
-                              {renderBionicText(step, bionicReading)}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-1 shrink-0">
-                            {isCurrent && (
-                              <span className="text-xs font-mono font-bold text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded border border-amber-400">
-                                🔊 Reading
+                        return (
+                          <div
+                            key={sIdx}
+                            id={unitId}
+                            onClick={() => handleJumpToUnit(unitId, chapter.chapterNumber)}
+                            className={`flex items-start justify-between gap-3 p-3 rounded transition-all duration-150 group cursor-pointer ${
+                              isCurrent
+                                ? 'bg-amber-100/90 border-2 border-amber-600 ring-2 ring-amber-400 shadow-md'
+                                : 'bg-white border border-black hover:border-amber-700 shadow-2xs'
+                            }`}
+                            title="Click to start listening to this step"
+                          >
+                            <div className="flex items-start gap-3">
+                              <span
+                                className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0 mt-0.5 ${
+                                  isCurrent
+                                    ? 'bg-amber-700 text-white animate-pulse'
+                                    : 'bg-black text-white'
+                                }`}
+                              >
+                                {sIdx + 1}
                               </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCopyStep(step, stepKey);
-                              }}
-                              className="text-slate-400 hover:text-black shrink-0 p-1 rounded transition-colors no-print cursor-pointer"
-                              title="Copy this action step"
-                            >
-                              {isCopied ? (
-                                <Check className="w-4 h-4 text-emerald-600" />
-                              ) : (
-                                <Copy className="w-4 h-4" />
+                              <p className={`${bodySizeClass} max-w-[70ch] font-medium text-slate-900`}>
+                                {renderBionicText(step, bionicReading)}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              {isCurrent && (
+                                <span className="text-xs font-mono font-bold text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded border border-amber-400">
+                                  🔊 Reading
+                                </span>
                               )}
-                            </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopyStep(step, stepKey);
+                                }}
+                                className="text-slate-400 hover:text-black shrink-0 p-1 rounded transition-colors no-print cursor-pointer"
+                                title="Copy this action step"
+                              >
+                                {isCopied ? (
+                                  <Check className="w-4 h-4 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* 5. ⚠️ THE TRAP Box (Full-Width with Sentence Highlighting) */}
-                <div className="callout-trap p-5 rounded-md space-y-2 print-avoid-break border border-black/30">
-                  <div className="flex items-center gap-2 text-xs font-mono font-extrabold uppercase tracking-wider text-black">
-                    <span className="text-base">⚠️</span>
-                    <span>THE TRAP / WHY WILLPOWER FAILS BIOLOGICALLY</span>
+                {chapter.theTrap && (
+                  <div className="callout-trap p-5 rounded-md space-y-2 print-avoid-break border border-black/30">
+                    <div className="flex items-center gap-2 text-xs font-mono font-extrabold uppercase tracking-wider text-black">
+                      <span className="text-base">⚠️</span>
+                      <span>THE TRAP / WHY WILLPOWER FAILS BIOLOGICALLY</span>
+                    </div>
+
+                    <h4
+                      id={`chapter-${chapter.chapterNumber}-trap-header`}
+                      onClick={() =>
+                        handleJumpToUnit(`chapter-${chapter.chapterNumber}-trap-header`, chapter.chapterNumber)
+                      }
+                      className={`text-base font-extrabold font-sans-custom text-black p-1 rounded cursor-pointer transition-colors ${
+                        activeSpeechUnitId === `chapter-${chapter.chapterNumber}-trap-header`
+                          ? 'bg-amber-200 ring-2 ring-amber-400'
+                          : 'hover:bg-amber-50'
+                      }`}
+                    >
+                      {chapter.theTrap.title}
+                    </h4>
+
+                    <p className={`${bodySizeClass} max-w-[75ch] text-slate-900 leading-relaxed`}>
+                      {splitIntoSentences(chapter.theTrap.description).map((sent, sIdx) => {
+                        const unitId = `chapter-${chapter.chapterNumber}-trap-desc-s${sIdx}`;
+                        const isCurrent = activeSpeechUnitId === unitId;
+
+                        return (
+                          <span
+                            key={sIdx}
+                            id={unitId}
+                            onClick={() => handleJumpToUnit(unitId, chapter.chapterNumber)}
+                            className={`cursor-pointer transition-all duration-150 rounded px-1 py-0.5 inline ${
+                              isCurrent
+                                ? 'bg-amber-200 text-slate-950 font-bold ring-2 ring-amber-500 shadow-sm'
+                                : 'hover:bg-amber-100/70'
+                            }`}
+                            title="Click to listen from this sentence"
+                          >
+                            {isCurrent && (
+                              <span className="inline-block mr-1 text-amber-800 animate-pulse text-xs font-mono font-black">
+                                🔊
+                              </span>
+                            )}
+                            {renderBionicText(sent, bionicReading)}{' '}
+                          </span>
+                        );
+                      })}
+                    </p>
                   </div>
-
-                  <h4
-                    id={`chapter-${chapter.chapterNumber}-trap-header`}
-                    onClick={() =>
-                      handleJumpToUnit(`chapter-${chapter.chapterNumber}-trap-header`, chapter.chapterNumber)
-                    }
-                    className={`text-base font-extrabold font-sans-custom text-black p-1 rounded cursor-pointer transition-colors ${
-                      activeSpeechUnitId === `chapter-${chapter.chapterNumber}-trap-header`
-                        ? 'bg-amber-200 ring-2 ring-amber-400'
-                        : 'hover:bg-amber-50'
-                    }`}
-                  >
-                    {chapter.theTrap.title}
-                  </h4>
-
-                  <p className={`${bodySizeClass} max-w-[75ch] text-slate-900 leading-relaxed`}>
-                    {splitIntoSentences(chapter.theTrap.description).map((sent, sIdx) => {
-                      const unitId = `chapter-${chapter.chapterNumber}-trap-desc-s${sIdx}`;
-                      const isCurrent = activeSpeechUnitId === unitId;
-
-                      return (
-                        <span
-                          key={sIdx}
-                          id={unitId}
-                          onClick={() => handleJumpToUnit(unitId, chapter.chapterNumber)}
-                          className={`cursor-pointer transition-all duration-150 rounded px-1 py-0.5 inline ${
-                            isCurrent
-                              ? 'bg-amber-200 text-slate-950 font-bold ring-2 ring-amber-500 shadow-sm'
-                              : 'hover:bg-amber-100/70'
-                          }`}
-                          title="Click to listen from this sentence"
-                        >
-                          {isCurrent && (
-                            <span className="inline-block mr-1 text-amber-800 animate-pulse text-xs font-mono font-black">
-                              🔊
-                            </span>
-                          )}
-                          {renderBionicText(sent, bionicReading)}{' '}
-                        </span>
-                      );
-                    })}
-                  </p>
-                </div>
+                )}
 
                 {/* 6. 📋 BORDERED COMPARISON TABLE */}
                 {chapter.comparisonTable && chapter.comparisonTable.rows.length > 0 && (
                   <div className="w-full overflow-x-auto my-5 print-avoid-break">
                     <div className="text-xs font-mono font-extrabold uppercase tracking-wider text-black mb-1.5 flex items-center gap-1.5">
-                      <span>Table {chapter.chapterNumber}.1: Wrong Approach vs. ADHD Master Protocol</span>
+                      <span>Table {chapter.chapterNumber}.1: Common Pitfalls vs. Applied Action Protocol</span>
                     </div>
                     <table className="textbook-table">
                       <thead>
@@ -1684,24 +1871,112 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                 )}
 
                 {/* 8. 🧩 INTERACTIVE ACTIVE RECALL SELF-CHECK FLASHCARD */}
+                {/* Flexible Structured Chapter Blocks (When Present) */}
+                {chapter.blocks && chapter.blocks.length > 0 && (
+                  <div className="space-y-3 pt-1">
+                    {chapter.blocks.map((block, bIdx) => {
+                      if (block.type === 'explanation') {
+                        return (
+                          <div key={bIdx} className="p-3.5 rounded-lg border border-slate-200 bg-white text-sm space-y-1">
+                            {block.title && <div className="font-mono text-xs font-bold uppercase">{block.title}</div>}
+                            <p className="leading-relaxed">{renderBionicText(block.text, bionicReading)}</p>
+                            {block.sourceQuote && (
+                              <blockquote className="text-xs text-slate-600 italic border-l-2 pl-2">
+                                "{block.sourceQuote}"
+                              </blockquote>
+                            )}
+                          </div>
+                        );
+                      }
+                      if (block.type === 'source_evidence') {
+                        return (
+                          <div key={bIdx} className="p-3.5 rounded-lg border border-amber-200 bg-amber-50/70 text-sm space-y-1">
+                            <div className="font-mono text-xs font-bold text-amber-900 uppercase">
+                              Spoken Source Evidence {block.sourceRange && `(${block.sourceRange})`}
+                            </div>
+                            <p className="font-medium text-slate-900">{block.claim}</p>
+                            {block.exactQuote && (
+                              <p className="italic text-slate-800 border-l-2 border-amber-400 pl-2">
+                                "{renderBionicText(block.exactQuote, bionicReading)}"
+                              </p>
+                            )}
+                            {block.speakerAttribution && <div className="text-xs text-slate-600">— {block.speakerAttribution}</div>}
+                          </div>
+                        );
+                      }
+                      if (block.type === 'action_step') {
+                        return (
+                          <div key={bIdx} className="p-3.5 rounded-lg border border-emerald-200 bg-emerald-50/70 text-sm space-y-1">
+                            <div className="font-mono text-xs font-bold text-emerald-900 uppercase">
+                              ⚡ Action Step {block.isDirectSpeakerRecommendation ? '(Direct Recommendation)' : ''}
+                            </div>
+                            <p className="font-medium text-slate-900">{renderBionicText(block.step, bionicReading)}</p>
+                            {block.rationale && <div className="text-xs text-slate-600">{block.rationale}</div>}
+                          </div>
+                        );
+                      }
+                      if (block.type === 'definition') {
+                        return (
+                          <div key={bIdx} className="p-3.5 rounded-lg border border-purple-200 bg-purple-50/60 text-sm space-y-1">
+                            <div className="font-mono text-xs font-bold text-purple-900 uppercase">
+                              📖 {block.term}
+                            </div>
+                            <p className="text-slate-900">{renderBionicText(block.definition, bionicReading)}</p>
+                            {block.context && <div className="text-xs text-slate-500">{block.context}</div>}
+                          </div>
+                        );
+                      }
+                      if (block.type === 'caution_trap') {
+                        return (
+                          <div key={bIdx} className="p-3.5 rounded-lg border border-rose-200 bg-rose-50/60 text-sm space-y-1">
+                            <div className="font-mono text-xs font-bold text-rose-900 uppercase">
+                              ⚠️ {block.title || block.trap}
+                            </div>
+                            <p className="text-slate-800">{renderBionicText(block.whyItFails, bionicReading)}</p>
+                            {block.sourceWarning && <div className="text-xs font-bold text-rose-800">{block.sourceWarning}</div>}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })}
+                  </div>
+                )}
+
+                {/* 8. 🧩 INTERACTIVE ACTIVE RECALL & SELF-ASSESSMENT CHALLENGE */}
                 {chapter.quickRecall && (
-                  <div className="border-2 border-black rounded-md p-4 sm:p-5 bg-[#FEF3C7] space-y-3 print-avoid-break no-print shadow-2xs">
-                    <div className="flex items-center justify-between text-xs font-mono font-extrabold uppercase tracking-wider text-black">
+                  <div className="border border-amber-300 rounded-lg p-4 sm:p-5 bg-[#FEF3C7]/70 space-y-3 print-avoid-break no-print shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono font-extrabold uppercase tracking-wider text-black">
                       <span className="flex items-center gap-1.5">
                         <Zap className="w-4 h-4 text-amber-700" />
-                        <span>🧠 Active Neural Recall (Test Your Memory)</span>
+                        <span>🧠 Active Recall Challenge (Test Memory Before Checking)</span>
                       </span>
-                      {masteredRecalls[chapter.chapterNumber] && (
-                        <span className="bg-emerald-600 text-white px-2 py-0.5 rounded text-[10px] font-bold">
-                          ✓ MASTERED
+
+                      {/* Current Self-Assessment Rating Tag */}
+                      {recallEvaluations[chapter.chapterNumber] && (
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                          recallEvaluations[chapter.chapterNumber] === 'got_it'
+                            ? 'bg-emerald-100 text-emerald-900 border-emerald-400'
+                            : recallEvaluations[chapter.chapterNumber] === 'partial'
+                            ? 'bg-amber-100 text-amber-900 border-amber-400'
+                            : 'bg-orange-100 text-orange-900 border-orange-400'
+                        }`}>
+                          {recallEvaluations[chapter.chapterNumber] === 'got_it'
+                            ? '✓ Confident (Retained)'
+                            : recallEvaluations[chapter.chapterNumber] === 'partial'
+                            ? '~ Partially Retained'
+                            : '🟠 Needs Review'}
                         </span>
                       )}
                     </div>
 
-                    <div className="bg-white border-2 border-black rounded p-4 space-y-3">
-                      <div className="text-xs font-mono text-slate-500 uppercase font-bold">
-                        Recall Question:
+                    <div className="bg-white border border-slate-300 rounded-lg p-4 space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between text-xs font-mono text-slate-500 uppercase font-bold">
+                        <span>Retrieval Question:</span>
+                        <span className="text-[11px] font-normal lowercase text-slate-400">
+                          Formulate answer in your mind first
+                        </span>
                       </div>
+
                       <p
                         id={`chapter-${chapter.chapterNumber}-recall-q`}
                         onClick={() =>
@@ -1710,7 +1985,7 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                             chapter.chapterNumber
                           )
                         }
-                        className={`text-base font-bold text-black font-sans-custom p-1 rounded cursor-pointer transition-colors ${
+                        className={`text-base font-bold text-black font-sans-custom p-1.5 rounded cursor-pointer transition-colors ${
                           activeSpeechUnitId === `chapter-${chapter.chapterNumber}-recall-q`
                             ? 'bg-amber-200 ring-2 ring-amber-400'
                             : 'hover:bg-amber-50'
@@ -1721,10 +1996,12 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                       </p>
 
                       {flippedCards[chapter.chapterNumber] ? (
-                        <div className="pt-3 border-t border-slate-200 space-y-2 animate-fadeIn">
-                          <div className="text-xs font-mono text-emerald-800 uppercase font-bold">
-                            Verified Biological Mechanism:
+                        <div className="pt-3 border-t border-slate-200 space-y-3 animate-fadeIn">
+                          <div className="text-xs font-mono text-emerald-800 uppercase font-bold flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Grounded Mechanism & Explanation:</span>
                           </div>
+
                           <p
                             id={`chapter-${chapter.chapterNumber}-recall-a`}
                             onClick={() =>
@@ -1742,33 +2019,73 @@ export const StudyGuideViewer: React.FC<StudyGuideViewerProps> = ({
                           >
                             {chapter.quickRecall.answer}
                           </p>
-                          <div className="p-2.5 bg-amber-50 border border-amber-300 rounded text-xs font-mono text-amber-950 font-bold">
-                            Core Law: {chapter.quickRecall.coreTakeaway}
+
+                          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md text-xs font-mono text-amber-950 font-semibold">
+                            💡 Core Principle: {chapter.quickRecall.coreTakeaway}
                           </div>
 
-                          {!masteredRecalls[chapter.chapterNumber] && (
-                            <div className="pt-2 flex justify-end">
+                          {/* Honest 3-tier Self-Assessment Controls */}
+                          <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
+                              <span className="font-bold uppercase">Rate Your Recall:</span>
+                              <span>How well did your mental recall match?</span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                               <button
                                 type="button"
-                                onClick={() => handleMarkRecallMastered(chapter.chapterNumber)}
-                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold rounded shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                                onClick={() => handleRateRecall(chapter.chapterNumber, 'got_it')}
+                                className={`px-2.5 py-1.5 rounded text-xs font-mono font-bold border flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                                  recallEvaluations[chapter.chapterNumber] === 'got_it'
+                                    ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300'
+                                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300'
+                                }`}
                               >
                                 <Award className="w-3.5 h-3.5" />
-                                <span>Got It! Mark as Mastered ✨</span>
+                                <span>Got It Right</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRateRecall(chapter.chapterNumber, 'partial')}
+                                className={`px-2.5 py-1.5 rounded text-xs font-mono font-bold border flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                                  recallEvaluations[chapter.chapterNumber] === 'partial'
+                                    ? 'bg-amber-500 text-white border-amber-600 shadow-sm ring-2 ring-amber-200'
+                                    : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                                }`}
+                              >
+                                <HelpCircle className="w-3.5 h-3.5" />
+                                <span>Partially Understood</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRateRecall(chapter.chapterNumber, 'review')}
+                                className={`px-2.5 py-1.5 rounded text-xs font-mono font-bold border flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                                  recallEvaluations[chapter.chapterNumber] === 'review'
+                                    ? 'bg-orange-600 text-white border-orange-700 shadow-sm ring-2 ring-orange-200'
+                                    : 'bg-orange-50 hover:bg-orange-100 text-orange-950 border-orange-300'
+                                }`}
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span>Needs Review</span>
                               </button>
                             </div>
-                          )}
+                          </div>
                         </div>
                       ) : (
-                        <div className="pt-2">
+                        <div className="pt-1 flex items-center justify-between flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => handleFlipRecall(chapter.chapterNumber)}
-                            className="px-3.5 py-2 bg-black hover:bg-slate-800 text-white font-mono text-xs font-bold rounded flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                            className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white font-mono text-xs font-bold rounded flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 transition-all"
                           >
                             <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Flip to Reveal Biological Mechanism</span>
+                            <span>Flip to Reveal Evidence Explanation</span>
                           </button>
+                          <span className="text-[11px] font-mono text-slate-500">
+                            Tests evidence recall without premature clueing
+                          </span>
                         </div>
                       )}
                     </div>

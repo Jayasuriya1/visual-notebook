@@ -95,17 +95,17 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <img
               src="/icon.svg"
-              alt="ADHD Visual Textbook"
+              alt="Visual Notebook"
               className="w-7 h-7 sm:w-8 sm:h-8 rounded object-contain border border-black/20 shadow-2xs shrink-0"
             />
             <div className="flex flex-col min-w-0">
               <span className="font-extrabold tracking-tight uppercase text-black font-mono text-[11px] sm:text-xs md:text-sm truncate">
-                <span className="inline sm:hidden">ADHD TEXTBOOK</span>
-                <span className="hidden sm:inline md:hidden">ADHD VISUAL TEXTBOOK</span>
-                <span className="hidden md:inline">ADHD VISUAL TEXTBOOK & A4 PDF</span>
+                <span className="inline sm:hidden">VISUAL NOTEBOOK</span>
+                <span className="hidden sm:inline md:hidden">VISUAL NOTEBOOK</span>
+                <span className="hidden md:inline">VISUAL NOTEBOOK · APPLIED KNOWLEDGE</span>
               </span>
-              <span className="text-[10px] text-slate-500 font-mono tracking-wider -mt-0.5 hidden xl:inline">
-                Pure Ink Contrast · Single-Column Flow
+              <span className="text-[10px] text-amber-900 font-mono tracking-wider -mt-0.5 hidden xl:inline font-bold">
+                “Knowledge isn’t power. Applied knowledge is.”
               </span>
             </div>
           </div>
@@ -640,7 +640,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 <div className="flex flex-col gap-1">
                   {[
                     { id: 'atkinson', label: 'Atkinson Hyperlegible' },
-                    { id: 'lexend', label: 'Lexend (ADHD Focus)' },
+                    { id: 'lexend', label: 'Lexend (High Readability)' },
                     { id: 'sans', label: 'Jakarta Sans' }
                   ].map((f) => (
                     <button
